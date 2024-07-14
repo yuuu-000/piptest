@@ -81,6 +81,7 @@
   <div id="pipactive"></div>
 
   <script type="text/javascript">
+    window.onload = function() {
       const worker = new Worker("./worker.js");
 
       worker.onmessage = function(e) {
@@ -88,6 +89,7 @@
       };
 
       worker.postMessage("start"); 
+    };
   </script>
 
   <script>
