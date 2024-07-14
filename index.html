@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>pip test</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
+  <style type="text/css">
     body {
       background-color: #000;
       width: 100%;
@@ -81,18 +81,17 @@
   <div id="pipactive"></div>
 
   <script type="text/javascript">
-    window.onload = function() {
-      const worker = new Worker("./worker.js");
-
-      worker.postMessage("start");
-      
-      worker.onmessage = function(e) {
-        document.getElementById("box").textContent = e.data;
-      }; 
-    };
+   worker.onmessage = function(e) {
+    const data = e.data;
+    if (data && data.hasOwnProperty('data')) {
+        document.getElementById("box").textContent = data.data;
+    } else {
+        console.error("Error: Received null data from worker.");
+    }
+  };
   </script>
 
-  <script>
+  <script type="text/javascript">
     const pipButton = document.getElementById("pip-button");
     if ("documentPictureInPicture" in window) {
 
