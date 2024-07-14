@@ -84,11 +84,11 @@
     window.onload = function() {
       const worker = new Worker("./worker.js");
 
+      worker.postMessage("start");
+      
       worker.onmessage = function(e) {
         document.getElementById("box").textContent = e.data;
-      };
-
-      worker.postMessage("start"); 
+      }; 
     };
   </script>
 
