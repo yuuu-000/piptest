@@ -81,6 +81,7 @@
   <div id="pipactive"></div>
 
   <script type="text/javascript">
+    const worker = new Worker("./worker.js");
    worker.onmessage = function(e) {
     const data = e.data;
     if (data && data.hasOwnProperty('data')) {
