@@ -83,7 +83,7 @@
   <script type="text/javascript">
     const worker = new Worker("./worker.js");
   　worker.addEventListener("message", (e) => {
-     const box = getElementById("box");
+     const box = document.getElementById("box");
      box.textContent = e.data;
    });  
     worker.postMessage("start");
