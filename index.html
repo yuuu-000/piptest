@@ -84,11 +84,7 @@
     const worker = new Worker("./worker.js");
    worker.onmessage = function(e) {
     const data = e.data;
-    if (data && data.hasOwnProperty('data')) {
-        document.getElementById("box").textContent = data.data;
-    } else {
-        console.error("Error: Received null data from worker.");
-    }
+        document.getElementById("box").textContent = data;
   };
   </script>
 
