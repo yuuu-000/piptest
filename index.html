@@ -6,7 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     body {
-      background-color: #000000;
+      background-color: #000;
       width: 100%;
       height: 100%;
       margin: 0;
@@ -14,7 +14,7 @@
     }
 
     button {
-      color: #000000;
+      color: #000;
       letter-spacing: 2px;
       font-size: calc(0.8vw + 0.8rem);
       font-weight: bold;
@@ -28,7 +28,7 @@
     }
 
     button::before {
-      content: url("./logo_PiP_close.svg");
+      content: "";
       transform: translateY(-50%);
       position: absolute;
       width: 100%;
@@ -74,7 +74,6 @@
     }
   </style>
 </head>
-
 <body>
 
   <button id="pip-button" title="PiP Mode Button">PiP Open</button>
@@ -171,6 +170,5 @@
       });
     }
   </script>
-
 </body>
 </html>
