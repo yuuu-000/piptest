@@ -82,11 +82,11 @@
 
   <script type="text/javascript">
     const worker = new Worker("./worker.js");
-   worker.onmessage = function(e) {
-    const data = e.data;
-        document.getElementById("box").textContent = data;
-  };
-   worker.postMessage("start");
+  　worker.addEventListener("message", (e) => {
+     const box = getElementById("box");
+     box.textContent = e.data;
+   });  
+    worker.postMessage("start");
   </script>
 
   <script type="text/javascript">
