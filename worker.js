@@ -1,7 +1,5 @@
 self.onmessage = function(e) {
-  setInterval(function () {
-    const date = new Date(),
-      D = ('00' + date.getMilliseconds()).slice(-3);
-    postMessage(D);
-  }, 1);
+    const date = new Date();
+    const milliseconds = ("00" + date.getMilliseconds()).slice(-3);
+    postMessage({ data: milliseconds });
 };
