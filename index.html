@@ -81,12 +81,15 @@
   <div id="pipactive"></div>
 
   <script type="text/javascript">
-    const worker = new Worker("./worker.js");
-  　worker.addEventListener("message", (e) => {
-     const box = document.getElementById("box");
-     box.textContent = e.data;
-   });  
-    worker.postMessage("start");
+     const box =document.getElementById("box");
+     const timer = () => {
+
+     const date = new Date(),
+     const D = ('00' + date.getMilliseconds()).slice(-3);
+     box.textContent = D;
+     };
+
+     setInterval(timer, 0);
   </script>
 
   <script type="text/javascript">
