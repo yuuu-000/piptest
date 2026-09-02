@@ -3,12 +3,12 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Analog Clock PiP</title>
   <style>
     :root {
-      --bg: #252525;
-      --fg: #fff
+      --background: #252525;
+      --text-main: #fff
     }
 
     * {
@@ -23,8 +23,8 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      background: var(--bg);
-      color: var(--fg);
+      background: var(--background);
+      color: var(--text-main);
       padding: 24px;
       gap: 24px;
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif
@@ -37,21 +37,22 @@
       gap: 20px
     }
 
-    #clockCanvas {
+    /* 表示サイズは190pxのまま、内部解像度を上げて高精細化 */
+    canvas {
       width: 190px;
       height: 190px;
-      display: block;
       border-radius: 50%;
-      background: var(--bg)
+      background: var(--background)
     }
 
-    #videoElement {
+    /* video要素を完全に不可視かつ最小サイズに縮小 */
+    video {
       position: fixed;
-      left: -100px;
-      top: -100px;
-      width: 2px;
-      height: 2px;
-      opacity: .01;
+      left: -9999px;
+      top: -9999px;
+      width: 0px;
+      height: 0px;
+      opacity: 0;
       pointer-events: none
     }
 
@@ -67,7 +68,7 @@
       border-radius: 9999px;
       border: 1px solid rgba(255, 255, 255, .2);
       background: rgba(255, 255, 255, .1);
-      color: #fff;
+      color: var(--text-main);
       font-size: 14px;
       cursor: pointer
     }
@@ -86,227 +87,174 @@
 
 <body>
   <div id="clock-card">
-    <canvas id="clockCanvas" width="570" height="570"></canvas>
+    <!-- 内部解像度を760x760に倍増して高解像度化 -->
+    <canvas id="clockCanvas" width="760" height="760"></canvas>
     <video id="videoElement" autoplay playsinline muted></video>
     <div class="button-group">
-      <button id="pipButton" disabled>PiP非対応環境です</button>
+      <button id="pipButton" disabled>PiP</button>
       <button id="toggleSmooth">Smooth: OFF</button>
     </div>
     <div id="status">初期化中...</div>
   </div>
-
   <script>
     "use strict";
-
     const canvas = document.getElementById("clockCanvas");
     const ctx = canvas.getContext("2d");
     const video = document.getElementById("videoElement");
     const pipButton = document.getElementById("pipButton");
     const toggleButton = document.getElementById("toggleSmooth");
     const statusEl = document.getElementById("status");
-
     let stream = null;
     let isSmooth = false;
-    let rafId = null;
-    let pipStarted = false;
+    let animationFrame = null;
 
-    function setStatus(text) { statusEl.textContent = text }
+    function setStatus(msg) { statusEl.textContent = msg }
 
-    toggleButton.addEventListener("click", () => {
-      isSmooth = !isSmooth;
-      toggleButton.textContent = `Smooth: ${isSmooth ? "ON" : "OFF"}`;
-    });
+    toggleButton.addEventListener("click", () => { isSmooth = !isSmooth; toggleButton.textContent = `Smooth: ${isSmooth ? "ON" : "OFF"}` });
 
     function drawClock() {
       const now = new Date();
-      const s = now.getSeconds();
-      const ms = now.getMilliseconds();
-      const m = now.getMinutes();
-      const h = now.getHours() % 12;
-
+      const seconds = now.getSeconds(), milliseconds = now.getMilliseconds(), minutes = now.getMinutes(), hours = now.getHours() % 12;
       let secondDeg, minuteDeg, hourDeg;
-
       if (isSmooth) {
-        secondDeg = s * 6 + ms * .006;
-        minuteDeg = m * 6 + s * .1 + ms * .0001;
-        hourDeg = h * 30 + m * .5 + s * (.5 / 60);
+        secondDeg = seconds * 6 + milliseconds * .006;
+        minuteDeg = minutes * 6 + seconds * .1 + milliseconds * .0001;
+        hourDeg = hours * 30 + minutes * .5 + seconds * (.5 / 60);
       } else {
-        secondDeg = s * 6;
-        minuteDeg = m * 6 + s * .1;
-        hourDeg = h * 30 + m * .5;
+        secondDeg = seconds * 6;
+        minuteDeg = minutes * 6 + seconds * .1;
+        hourDeg = hours * 30 + minutes * .5;
       }
-
       ctx.fillStyle = "#252525";
-      ctx.fillRect(0, 0, 570, 570);
-
-      const cx = 285, cy = 285, radius = 285;
-
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width / 2, cy = canvas.height / 2, radius = canvas.width / 2;
       ctx.save();
       ctx.translate(cx, cy);
-
-      ctx.font = "400 32px Ubuntu,sans-serif";
+      // 解像度倍増（380→760）に合わせてフォントサイズも2倍（32px→64px）にスケーリング
+      ctx.font = "400 64px 'Ubuntu',sans-serif";
       ctx.fillStyle = "#fff";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-
       for (let i = 1; i <= 12; i++) {
         const angle = (i * 30 - 90) * Math.PI / 180;
         const dist = radius * .78;
         ctx.fillText(i, Math.cos(angle) * dist, Math.sin(angle) * dist);
       }
-
       ctx.save();
       ctx.rotate(hourDeg * Math.PI / 180);
       ctx.fillStyle = "#eee";
-      ctx.fillRect(-6, -64, 12, 64);
+      ctx.fillRect(-4, -64, 8, 64);
       ctx.beginPath();
-      ctx.roundRect(-9, -192, 18, 168, 9999);
+      ctx.roundRect(-6, -192, 12, 168, 9999);
       ctx.fill();
       ctx.restore();
-
       ctx.save();
       ctx.rotate(minuteDeg * Math.PI / 180);
       ctx.fillStyle = "#eee";
-      ctx.fillRect(-6, -64, 12, 64);
+      ctx.fillRect(-4, -64, 8, 64);
       ctx.beginPath();
-      ctx.roundRect(-9, -288, 18, 264, 9999);
+      ctx.roundRect(-6, -288, 12, 264, 9999);
       ctx.fill();
       ctx.restore();
-
       ctx.save();
       ctx.rotate(secondDeg * Math.PI / 180);
       ctx.fillStyle = "#ffdd55";
-      ctx.fillRect(-3, -340, 6, 388);
+      ctx.fillRect(-2, -340, 4, 388);
       ctx.restore();
-
       ctx.beginPath();
       ctx.arc(0, 0, 24, 0, Math.PI * 2);
       ctx.fillStyle = "#fff";
       ctx.fill();
-
       ctx.beginPath();
       ctx.arc(0, 0, 14, 0, Math.PI * 2);
       ctx.fillStyle = "#ffdd55";
       ctx.fill();
-
       ctx.restore();
     }
 
     function startClock() {
+      if (animationFrame) cancelAnimationFrame(animationFrame);
       function loop() {
         drawClock();
-        rafId = requestAnimationFrame(loop);
+        animationFrame = requestAnimationFrame(loop);
       }
       loop();
     }
 
-    function isWebKitPiPSupported() {
-      if (typeof video.webkitSupportsPresentationMode !== "function") return false;
+    function setupStream() {
+      if (typeof canvas.captureStream !== "function") { setStatus("非対応ブラウザです"); return false }
       try {
-        return video.webkitSupportsPresentationMode("picture-in-picture");
-      } catch (e) {
-        return false;
-      }
-    }
-
-    function checkPiP() {
-      if (isWebKitPiPSupported() || typeof video.requestPictureInPicture === "function") {
-        pipButton.disabled = false;
-        pipButton.textContent = "ピクチャーインピクチャーを開始";
-        setStatus("タップしてPiPを開始");
-      } else {
-        pipButton.disabled = true;
-        setStatus("PiP非対応環境です");
-      }
-    }
-
-    async function createPiPStream() {
-      if (stream) return true;
-
-      if (typeof canvas.captureStream !== "function") {
-        setStatus("captureStream非対応です");
-        return false;
-      }
-
-      try {
-        /*
-         * ここで初めてCanvasをVideoへ接続する。
-         * 通常のDOM表示中はsrcObjectを設定しない。
-         */
         stream = canvas.captureStream(30);
         video.srcObject = stream;
         video.muted = true;
         video.autoplay = true;
         video.playsInline = true;
-
-        /*
-         * iOS WebKitではsrcObject設定直後に
-         * play()する。
-         */
-        await video.play();
-
         return true;
       } catch (e) {
-        console.error("PiP stream error:", e);
-        setStatus("PiPストリームエラー");
+        console.error(e);
+        setStatus("ストリームエラー");
         return false;
       }
     }
 
-    async function startPiP() {
-      if (pipStarted) {
-        if (typeof video.webkitSetPresentationMode === "function") {
-          try {
-            video.webkitSetPresentationMode("inline");
-            return;
-          } catch (e) { }
-        }
-
-        if (document.pictureInPictureElement) {
-          try {
-            await document.exitPictureInPicture();
-            return;
-          } catch (e) { }
-        }
+    async function playVideo() {
+      video.muted = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      try {
+        await video.play();
+        return true;
+      } catch (e) {
+        console.warn("video.play()", e);
+        return false;
       }
+    }
 
-      const ok = await createPiPStream();
-      if (!ok) return;
-
-      if (typeof video.webkitSetPresentationMode === "function") {
+    function checkPiP() {
+      if (typeof video.webkitSupportsPresentationMode === "function") {
         try {
-          video.webkitSetPresentationMode("picture-in-picture");
-          return;
-        } catch (e) {
-          console.error("WebKit PiP error:", e);
-        }
+          if (video.webkitSupportsPresentationMode("picture-in-picture")) {
+            pipButton.disabled = false;
+            pipButton.textContent = "ピクチャーインピクチャーを開始";
+            setStatus("タップしてPiPを開始");
+            return;
+          }
+        } catch (e) { }
       }
-
       if (typeof video.requestPictureInPicture === "function") {
-        try {
-          await video.requestPictureInPicture();
-        } catch (e) {
-          console.error("Standard PiP error:", e);
-          setStatus("PiP開始に失敗しました");
-        }
+        pipButton.disabled = false;
+        pipButton.textContent = "ピクチャーインピクチャーを開始";
+        setStatus("タップしてPiPを開始");
+        return;
       }
+      setStatus("PiP非対応環境です");
     }
 
     pipButton.addEventListener("click", async () => {
       pipButton.disabled = true;
-      await startPiP();
-      setTimeout(() => { pipButton.disabled = false }, 300);
+      await playVideo();
+      if (typeof video.webkitSetPresentationMode === "function") {
+        try {
+          video.webkitSetPresentationMode(video.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture");
+          return;
+        } catch (e) { console.error(e) }
+      }
+      if (typeof video.requestPictureInPicture === "function") {
+        try {
+          if (document.pictureInPictureElement) await document.exitPictureInPicture();
+          else await video.requestPictureInPicture();
+        } catch (e) { console.error(e) }
+      }
+      pipButton.disabled = false;
     });
 
     video.addEventListener("enterpictureinpicture", () => {
-      pipStarted = true;
       pipButton.disabled = false;
       pipButton.textContent = "ピクチャーインピクチャーを終了";
       setStatus("PiP再生中");
     });
 
     video.addEventListener("leavepictureinpicture", () => {
-      pipStarted = false;
       pipButton.disabled = false;
       pipButton.textContent = "ピクチャーインピクチャーを開始";
       setStatus("タップしてPiPを開始");
@@ -314,20 +262,24 @@
 
     video.addEventListener("webkitpresentationmodechanged", () => {
       if (video.webkitPresentationMode === "picture-in-picture") {
-        pipStarted = true;
         pipButton.disabled = false;
         pipButton.textContent = "ピクチャーインピクチャーを終了";
         setStatus("PiP再生中");
       } else {
-        pipStarted = false;
         pipButton.disabled = false;
         pipButton.textContent = "ピクチャーインピクチャーを開始";
         setStatus("タップしてPiPを開始");
       }
     });
 
-    startClock();
-    checkPiP();
+    async function init() {
+      startClock();
+      if (!setupStream()) return;
+      await playVideo();
+      checkPiP();
+    }
+
+    init();
   </script>
 </body>
 
