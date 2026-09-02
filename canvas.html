@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Canvas Clock to PiP with Robust EventListeners</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: #f0f0f0;
+        }
+        canvas {
+            border: 2px solid #333;
+            background: #fff;
+            margin-bottom: 10px;
+        }
+        video {
+            display: none;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="clockCanvas" width="300" height="150"></canvas>
+    <video id="videoElement" autoplay playsinline muted></video>
+    <button id="pipButton">ピクチャーインピクチャー開始</button>
+    <div id="status">ステータス: 停止中</div>
+
+    <script>
+        const canvas = document.getElementById('clockCanvas');
+        const ctx = canvas.getContext('2d');
+        const video = document.getElementById('videoElement');
+        const pipButton = document.getElementById('pipButton');
+        const statusDiv = document.getElementById('status');
+
+        // 1. リアルタイム時計の描画
+        function drawClock() {
+            const now = new Date();
+            const timeString = now.toTimeString().split(' ')[0] + '.' + Math.floor(now.getMilliseconds() / 100);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#333333';
+            ctx.font = '30px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(timeString, canvas.width / 2, canvas.height / 2);
+        }
+        setInterval(drawClock, 100);
+        drawClock();
+
+        // 2. Canvas ストリームのバインド
+        if (canvas.captureStream) {
+            video.srcObject = canvas.captureStream(30);
+        } else {
+            alert('お使いのブラウザは canvas.captureStream に対応していません。');
+        }
+
+        // ==========================================
+        // 3. イベントリスナーの設定（ここを強化）
+        // ==========================================
+
+        // 标准のPiP突入イベント
+        video.addEventListener('enterpictureinpicture', (event) => {
+            statusDiv.textContent = 'ステータス: PiP作動中 (Standard)';
+            pipButton.textContent = 'ピクチャーインピクチャー終了';
+            console.log('PiP Window:', event.pictureInPictureWindow);
+        });
+
+        // 標準のPiP終了イベント
+        video.addEventListener('leavepictureinpicture', () => {
+            statusDiv.textContent = 'ステータス: PiP終了 (Standard)';
+            pipButton.textContent = 'ピクチャーインピクチャー開始';
+        });
+
+        // iOS Safari (WebKit) 向けの独自プレゼンテーションモード変更イベント
+        video.addEventListener('webkitpresentationmodechanged', (event) => {
+            // event.mode は 'inline', 'fullscreen', 'picture-in-picture' などを取る
+            if (video.webkitPresentationMode === 'picture-in-picture') {
+                statusDiv.textContent = 'ステータス: PiP作動中 (iOS WebKit)';
+                pipButton.textContent = 'ピクチャーインピクチャー終了';
+            } else {
+                statusDiv.textContent = 'ステータス: PiP終了 (iOS WebKit)';
+                pipButton.textContent = 'ピクチャーインピクチャー開始';
+            }
+        });
+
+        // 4. ボタンによるPiPトグル制御
+        pipButton.addEventListener('click', async () => {
+            try {
+                await video.play();
+
+                // iOS / Safari 向け独自APIのフォールバック判定
+                if (typeof video.webkitSetPresentationMode === 'function') {
+                    if (video.webkitPresentationMode === 'picture-in-picture') {
+                        video.webkitSetPresentationMode('inline');
+                    } else {
+                        video.webkitSetPresentationMode('picture-in-picture');
+                    }
+                    return;
+                }
+
+                // 標準 PiP API の制御
+                if (document.pictureInPictureElement) {
+                    await document.exitPictureInPicture();
+                } else if (video.requestPictureInPicture) {
+                    await video.requestPictureInPicture();
+                } else {
+                    alert('この環境はピクチャーインピクチャーに対応していません。');
+                }
+            } catch (error) {
+                console.error('PiPエラー:', error);
+                statusDiv.textContent = 'ステータス: エラー発生 (' + error.message + ')';
+            }
+        });
+    </script>
+
+</body>
+</html>
