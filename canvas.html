@@ -9,8 +9,8 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--background);color:var(--text-main);padding:24px;gap:24px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",sans-serif}
 #clock-card{display:flex;flex-direction:column;align-items:center;gap:20px}
-canvas{width:190px;height:190px;border-radius:50%;background:var(--background)}
-video{position:fixed;left:0;top:0;width:1px;height:1px;opacity:.01;pointer-events:none}
+#clockCanvas{width:190px;height:190px;border-radius:50%;background:var(--background);display:block}
+#videoElement{position:fixed;left:-10px;top:-10px;width:1px;height:1px;opacity:.01;pointer-events:none}
 .button-group{display:flex;flex-direction:column;align-items:center;gap:12px}
 button{padding:10px 20px;border-radius:9999px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:var(--text-main);font-size:14px;cursor:pointer}
 button:disabled{opacity:.5;cursor:not-allowed}
@@ -19,7 +19,7 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </head>
 <body>
 <div id="clock-card">
-<canvas id="clockCanvas" width="380" height="380"></canvas>
+<canvas id="clockCanvas" width="570" height="570"></canvas>
 <video id="videoElement" autoplay playsinline muted></video>
 <div class="button-group">
 <button id="pipButton" disabled>PiP非対応環境です</button>
@@ -27,26 +27,39 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </div>
 <div id="status">初期化中...</div>
 </div>
+
 <script>
 "use strict";
+
 const canvas=document.getElementById("clockCanvas");
 const ctx=canvas.getContext("2d");
 const video=document.getElementById("videoElement");
 const pipButton=document.getElementById("pipButton");
 const toggleButton=document.getElementById("toggleSmooth");
 const statusEl=document.getElementById("status");
+
+const SCALE=3;
+const SIZE=190;
 let stream=null;
 let isSmooth=false;
 let animationFrame=null;
 
 function setStatus(msg){statusEl.textContent=msg}
 
-toggleButton.addEventListener("click",()=>{isSmooth=!isSmooth;toggleButton.textContent=`Smooth: ${isSmooth?"ON":"OFF"}`});
+toggleButton.addEventListener("click",()=>{
+ isSmooth=!isSmooth;
+ toggleButton.textContent=`Smooth: ${isSmooth?"ON":"OFF"}`;
+});
 
 function drawClock(){
  const now=new Date();
- const seconds=now.getSeconds(), milliseconds=now.getMilliseconds(), minutes=now.getMinutes(), hours=now.getHours()%12;
+ const seconds=now.getSeconds();
+ const milliseconds=now.getMilliseconds();
+ const minutes=now.getMinutes();
+ const hours=now.getHours()%12;
+
  let secondDeg,minuteDeg,hourDeg;
+
  if(isSmooth){
   secondDeg=seconds*6+milliseconds*.006;
   minuteDeg=minutes*6+seconds*.1+milliseconds*.0001;
@@ -56,20 +69,28 @@ function drawClock(){
   minuteDeg=minutes*6+seconds*.1;
   hourDeg=hours*30+minutes*.5;
  }
+
  ctx.fillStyle="#252525";
  ctx.fillRect(0,0,canvas.width,canvas.height);
- const cx=canvas.width/2,cy=canvas.height/2,radius=canvas.width/2;
+
+ const cx=canvas.width/2;
+ const cy=canvas.height/2;
+ const radius=canvas.width/2;
+
  ctx.save();
  ctx.translate(cx,cy);
+
  ctx.font="400 32px 'Ubuntu',sans-serif";
  ctx.fillStyle="#fff";
  ctx.textAlign="center";
  ctx.textBaseline="middle";
+
  for(let i=1;i<=12;i++){
   const angle=(i*30-90)*Math.PI/180;
   const dist=radius*.78;
   ctx.fillText(i,Math.cos(angle)*dist,Math.sin(angle)*dist);
  }
+
  ctx.save();
  ctx.rotate(hourDeg*Math.PI/180);
  ctx.fillStyle="#eee";
@@ -78,6 +99,7 @@ function drawClock(){
  ctx.roundRect(-3,-96,6,84,9999);
  ctx.fill();
  ctx.restore();
+
  ctx.save();
  ctx.rotate(minuteDeg*Math.PI/180);
  ctx.fillStyle="#eee";
@@ -86,33 +108,43 @@ function drawClock(){
  ctx.roundRect(-3,-144,6,132,9999);
  ctx.fill();
  ctx.restore();
+
  ctx.save();
  ctx.rotate(secondDeg*Math.PI/180);
  ctx.fillStyle="#ffdd55";
  ctx.fillRect(-1,-170,2,194);
  ctx.restore();
+
  ctx.beginPath();
  ctx.arc(0,0,12,0,Math.PI*2);
  ctx.fillStyle="#fff";
  ctx.fill();
+
  ctx.beginPath();
  ctx.arc(0,0,7,0,Math.PI*2);
  ctx.fillStyle="#ffdd55";
  ctx.fill();
+
  ctx.restore();
 }
 
 function startClock(){
  if(animationFrame)cancelAnimationFrame(animationFrame);
+
  function loop(){
   drawClock();
   animationFrame=requestAnimationFrame(loop);
  }
+
  loop();
 }
 
 function setupStream(){
- if(typeof canvas.captureStream!=="function"){setStatus("非対応ブラウザです");return false}
+ if(typeof canvas.captureStream!=="function"){
+  setStatus("非対応ブラウザです");
+  return false;
+ }
+
  try{
   stream=canvas.captureStream(30);
   video.srcObject=stream;
@@ -131,6 +163,7 @@ async function playVideo(){
  video.muted=true;
  video.autoplay=true;
  video.playsInline=true;
+
  try{
   await video.play();
   return true;
@@ -151,30 +184,53 @@ function checkPiP(){
    }
   }catch(e){}
  }
+
  if(typeof video.requestPictureInPicture==="function"){
   pipButton.disabled=false;
   pipButton.textContent="ピクチャーインピクチャーを開始";
   setStatus("タップしてPiPを開始");
   return;
  }
+
  setStatus("PiP非対応環境です");
 }
 
 pipButton.addEventListener("click",async()=>{
  pipButton.disabled=true;
+
+ if(video.webkitPresentationMode==="picture-in-picture"){
+  try{
+   video.webkitSetPresentationMode("inline");
+  }catch(e){
+   console.error(e);
+  }
+  pipButton.disabled=false;
+  return;
+ }
+
  await playVideo();
+
  if(typeof video.webkitSetPresentationMode==="function"){
   try{
-   video.webkitSetPresentationMode(video.webkitPresentationMode==="picture-in-picture"?"inline":"picture-in-picture");
+   video.webkitSetPresentationMode("picture-in-picture");
    return;
-  }catch(e){console.error(e)}
+  }catch(e){
+   console.error("WebKit PiP:",e);
+  }
  }
+
  if(typeof video.requestPictureInPicture==="function"){
   try{
-   if(document.pictureInPictureElement)await document.exitPictureInPicture();
-   else await video.requestPictureInPicture();
-  }catch(e){console.error(e)}
+   if(document.pictureInPictureElement){
+    await document.exitPictureInPicture();
+   }else{
+    await video.requestPictureInPicture();
+   }
+  }catch(e){
+   console.error("Standard PiP:",e);
+  }
  }
+
  pipButton.disabled=false;
 });
 
