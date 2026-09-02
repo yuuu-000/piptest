@@ -44,13 +44,8 @@
       background-color: var(--background);
     }
 
-    /* iOSで確実にPiPを機能させるため、display:noneではなく透明化してDOMに常駐させる */
     video {
-      position: absolute;
-      opacity: 0;
-      pointer-events: none;
-      width: 1px;
-      height: 1px;
+      display: none;
     }
 
     .button-group {
@@ -89,7 +84,7 @@
 
 <body>
   <div id="clock-card">
-    <!-- 2倍解像度（380x380）で高精細化、CSSで190x190に表示 -->
+    <!-- 2倍解像度（380x380）で高精細化 -->
     <canvas id="clockCanvas" width="380" height="380"></canvas>
     <video id="videoElement" autoplay playsinline muted></video>
     <div class="button-group">
@@ -110,6 +105,7 @@
     const statusEl = document.getElementById("status");
 
     let stream = null;
+    let clockTimer = null;
     let isSmooth = false;
 
     toggleButton.addEventListener("click", () => {
@@ -197,8 +193,13 @@
       ctx.fill();
 
       ctx.restore();
+    }
 
-      requestAnimationFrame(drawClock);
+    function startClock() {
+      drawClock();
+      if (clockTimer) clearInterval(clockTimer);
+      // SmoothがONのときは高頻度(30fps)、OFFのときは1秒ごとに描画
+      clockTimer = setInterval(drawClock, 33);
     }
 
     function setupStream() {
@@ -227,7 +228,7 @@
           }
         } catch (e) {}
       }
-      if (typeof video.requestPictureInPicture === "function" || document.pictureInPictureEnabled) {
+      if (typeof video.requestPictureInPicture === "function") {
         pipButton.disabled = false;
         setStatus("タップしてPiPを開始");
         return;
@@ -289,7 +290,7 @@
     });
 
     async function init() {
-      requestAnimationFrame(drawClock);
+      startClock();
       if (!setupStream()) return;
       await playVideo();
       checkPiP();
