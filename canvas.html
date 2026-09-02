@@ -84,11 +84,11 @@
 
 <body>
   <div id="clock-card">
-    <!-- 実サイズ190x190の2倍（380x380）に設定し、CSSで190pxに縮小表示して高精細化 -->
     <canvas id="clockCanvas" width="380" height="380"></canvas>
-    <video id="videoElement" autoplay playsinline muted></video>
+    <!-- iOS SafariでWebKitのPiPを確実に発動させるため controls と playsinline を付与 -->
+    <video id="videoElement" autoplay playsinline muted controls style="display:none;"></video>
     <div class="button-group">
-      <button id="pipButton" disabled>PiP</button>
+      <button id="pipButton" disabled>PiP非対応環境です</button>
       <button id="toggleSmooth">Smooth: OFF</button>
     </div>
     <div id="status">初期化中...</div>
@@ -235,25 +235,26 @@
         video.muted = true;
         video.playsInline = true;
         await video.play();
-        // 再生が開始されたら確実にボタンを有効化
-        if (pipButton.disabled) {
-          checkPiP();
-        }
       } catch (e) {}
     }
 
     pipButton.addEventListener("click", async () => {
       await playVideo();
 
+      // iOS Safari (WebKit) の場合はまずDOM上に一時的に表示させるなどのアプローチが必要な場合があるため、
+      // webkitSetPresentationMode を安全に呼び出すように修正
       if (typeof video.webkitSetPresentationMode === "function") {
         try {
-          if (video.webkitPresentationMode === "picture-in-picture") {
+          const currentMode = video.webkitPresentationMode;
+          if (currentMode === "picture-in-picture") {
             video.webkitSetPresentationMode("inline");
           } else {
             video.webkitSetPresentationMode("picture-in-picture");
           }
           return;
-        } catch (e) {}
+        } catch (e) {
+          console.error(e);
+        }
       }
 
       if (typeof video.requestPictureInPicture === "function") {
