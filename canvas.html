@@ -9,17 +9,17 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--background);color:var(--text-main);padding:24px;gap:24px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",sans-serif}
 #clock-card{display:flex;flex-direction:column;align-items:center;gap:20px}
-canvas{width:190px;height:190px;border-radius:50%;background:var(--background);display:block}
-video{position:fixed;left:-10px;top:-10px;width:1px;height:1px;opacity:.01;pointer-events:none}
+#clockCanvas{width:190px;height:190px;border-radius:50%;background:var(--background);display:block}
+#videoElement{position:fixed;left:0;top:0;width:1px;height:1px;opacity:.01;pointer-events:none}
 .button-group{display:flex;flex-direction:column;align-items:center;gap:12px}
-button{padding:10px 20px;border-radius:9999px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:var(--text-main);font-size:14px;cursor:pointer}
+button{padding:10px 20px;border-radius:9999px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;font-size:14px;cursor:pointer}
 button:disabled{opacity:.5;cursor:not-allowed}
 #status{font-size:13px;color:#9ca3af}
 </style>
 </head>
 <body>
 <div id="clock-card">
-<canvas id="clockCanvas" width="1140" height="1140"></canvas>
+<canvas id="clockCanvas" width="760" height="760"></canvas>
 <video id="videoElement" autoplay playsinline muted></video>
 <div class="button-group">
 <button id="pipButton" disabled>PiP</button>
@@ -38,15 +38,13 @@ const pipButton=document.getElementById("pipButton");
 const toggleButton=document.getElementById("toggleSmooth");
 const statusEl=document.getElementById("status");
 
-const SCALE=6;
+const SCALE=4;
 const SIZE=190;
 const W=SIZE*SCALE;
 
 let stream=null;
 let isSmooth=false;
 let animationFrame=null;
-
-ctx.imageSmoothingEnabled=true;
 
 function setStatus(msg){statusEl.textContent=msg}
 
@@ -157,7 +155,7 @@ function setupStream(){
   video.playsInline=true;
   return true;
  }catch(e){
-  console.error(e);
+  console.error("captureStream:",e);
   setStatus("ストリームエラー");
   return false;
  }
@@ -172,7 +170,7 @@ async function playVideo(){
   await video.play();
   return true;
  }catch(e){
-  console.warn("video.play()",e);
+  console.warn("video.play():",e);
   return false;
  }
 }
@@ -212,7 +210,7 @@ pipButton.addEventListener("click",async()=>{
    );
    return;
   }catch(e){
-   console.error(e);
+   console.error("WebKit PiP:",e);
   }
  }
 
@@ -224,7 +222,7 @@ pipButton.addEventListener("click",async()=>{
     await video.requestPictureInPicture();
    }
   }catch(e){
-   console.error(e);
+   console.error("Standard PiP:",e);
   }
  }
 
