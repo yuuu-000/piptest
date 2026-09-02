@@ -1,268 +1,285 @@
 <!DOCTYPE html>
 <html lang="ja">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
-<title>Analog Clock PiP</title>
-<style>
-:root{--background:#252525;--text-main:#fff}
-*{box-sizing:border-box;margin:0;padding:0}
-body{min-height:100svh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--background);color:var(--text-main);padding:24px;gap:24px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","Helvetica Neue",sans-serif}
-#clock-card{display:flex;flex-direction:column;align-items:center;gap:20px}
-#clockCanvas{width:190px;height:190px;border-radius:50%;background:var(--background);display:block}
-#videoElement{position:fixed;left:0;top:0;width:1px;height:1px;opacity:.01;pointer-events:none}
-.button-group{display:flex;flex-direction:column;align-items:center;gap:12px}
-button{padding:10px 20px;border-radius:9999px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;font-size:14px;cursor:pointer}
-button:disabled{opacity:.5;cursor:not-allowed}
-#status{font-size:13px;color:#9ca3af}
-</style>
+   
+  <meta charset="UTF-8">
+   
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Analog Clock PiP</title>
+    <style>
+    :root {
+      --background: #252525;
+      --text-main: #fff
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0
+    }
+
+    body {
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: var(--background);
+      color: var(--text-main);
+      padding: 24px;
+      gap: 24px;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif
+    }
+
+    #clock-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px
+    }
+
+    canvas {
+      width: 190px;
+      height: 190px;
+      border-radius: 50%;
+      background: var(--background)
+    }
+
+    video {
+      position: fixed;
+      left: 0;
+      top: 0;
+      width: 1px;
+      height: 1px;
+      opacity: .01;
+      pointer-events: none
+    }
+
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px
+    }
+
+    button {
+      padding: 10px 20px;
+      border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, .2);
+      background: rgba(255, 255, 255, .1);
+      color: var(--text-main);
+      font-size: 14px;
+      cursor: pointer
+    }
+
+    button:disabled {
+      opacity: .5;
+      cursor: not-allowed
+    }
+
+    #status {
+      font-size: 13px;
+      color: #9ca3af
+    }
+  </style>
 </head>
+
 <body>
-<div id="clock-card">
-<canvas id="clockCanvas" width="760" height="760"></canvas>
-<video id="videoElement" autoplay playsinline muted></video>
-<div class="button-group">
-<button id="pipButton" disabled>PiP</button>
-<button id="toggleSmooth">Smooth: OFF</button>
-</div>
-<div id="status">初期化中...</div>
-</div>
+    <div id="clock-card">
+        <canvas id="clockCanvas" width="380" height="380"></canvas>
+        <video id="videoElement" autoplay playsinline muted></video>
+        <div class="button-group">
+            <button id="pipButton" disabled>PiP</button>
+            <button id="toggleSmooth">Smooth: OFF</button>
+          </div>
+        <div id="status">初期化中...</div>
+      </div>
+   
+  <script>
+    "use strict";
+    const canvas = document.getElementById("clockCanvas");
+    const ctx = canvas.getContext("2d");
+    const video = document.getElementById("videoElement");
+    const pipButton = document.getElementById("pipButton");
+    const toggleButton = document.getElementById("toggleSmooth");
+    const statusEl = document.getElementById("status");
+    let stream = null;
+    let isSmooth = false;
+    let animationFrame = null;
 
-<script>
-"use strict";
+    function setStatus(msg) { statusEl.textContent = msg }
 
-const canvas=document.getElementById("clockCanvas");
-const ctx=canvas.getContext("2d");
-const video=document.getElementById("videoElement");
-const pipButton=document.getElementById("pipButton");
-const toggleButton=document.getElementById("toggleSmooth");
-const statusEl=document.getElementById("status");
+    toggleButton.addEventListener("click", () => { isSmooth = !isSmooth; toggleButton.textContent = `Smooth: ${isSmooth ? "ON" : "OFF"}` });
 
-const SCALE=4;
-const SIZE=190;
-const W=SIZE*SCALE;
+    function drawClock() {
+      const now = new Date();
+      const seconds = now.getSeconds(), milliseconds = now.getMilliseconds(), minutes = now.getMinutes(), hours = now.getHours() % 12;
+      let secondDeg, minuteDeg, hourDeg;
+      if (isSmooth) {
+        secondDeg = seconds * 6 + milliseconds * .006;
+        minuteDeg = minutes * 6 + seconds * .1 + milliseconds * .0001;
+        hourDeg = hours * 30 + minutes * .5 + seconds * (.5 / 60);
+      } else {
+        secondDeg = seconds * 6;
+        minuteDeg = minutes * 6 + seconds * .1;
+        hourDeg = hours * 30 + minutes * .5;
+      }
+      ctx.fillStyle = "#252525";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const cx = canvas.width / 2, cy = canvas.height / 2, radius = canvas.width / 2;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.font = "400 32px 'Ubuntu',sans-serif";
+      ctx.fillStyle = "#fff";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (let i = 1; i <= 12; i++) {
+        const angle = (i * 30 - 90) * Math.PI / 180;
+        const dist = radius * .78;
+        ctx.fillText(i, Math.cos(angle) * dist, Math.sin(angle) * dist);
+      }
+      ctx.save();
+      ctx.rotate(hourDeg * Math.PI / 180);
+      ctx.fillStyle = "#eee";
+      ctx.fillRect(-2, -32, 4, 32);
+      ctx.beginPath();
+      ctx.roundRect(-3, -96, 6, 84, 9999);
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      ctx.rotate(minuteDeg * Math.PI / 180);
+      ctx.fillStyle = "#eee";
+      ctx.fillRect(-2, -32, 4, 32);
+      ctx.beginPath();
+      ctx.roundRect(-3, -144, 6, 132, 9999);
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      ctx.rotate(secondDeg * Math.PI / 180);
+      ctx.fillStyle = "#ffdd55";
+      ctx.fillRect(-1, -170, 2, 194);
+      ctx.restore();
+      ctx.beginPath();
+      ctx.arc(0, 0, 12, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, 7, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffdd55";
+      ctx.fill();
+      ctx.restore();
+    }
 
-let stream=null;
-let isSmooth=false;
-let animationFrame=null;
+    function startClock() {
+      if (animationFrame) cancelAnimationFrame(animationFrame);
+      function loop() {
+        drawClock();
+        animationFrame = requestAnimationFrame(loop);
+      }
+      loop();
+    }
 
-function setStatus(msg){statusEl.textContent=msg}
+    function setupStream() {
+      if (typeof canvas.captureStream !== "function") { setStatus("非対応ブラウザです"); return false }
+      try {
+        stream = canvas.captureStream(30);
+        video.srcObject = stream;
+        video.muted = true;
+        video.autoplay = true;
+        video.playsInline = true;
+        return true;
+      } catch (e) {
+        console.error(e);
+        setStatus("ストリームエラー");
+        return false;
+      }
+    }
 
-toggleButton.addEventListener("click",()=>{
- isSmooth=!isSmooth;
- toggleButton.textContent=`Smooth: ${isSmooth?"ON":"OFF"}`;
-});
+    async function playVideo() {
+      video.muted = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      try {
+        await video.play();
+        return true;
+      } catch (e) {
+        console.warn("video.play()", e);
+        return false;
+      }
+    }
 
-function drawClock(){
- const now=new Date();
- const seconds=now.getSeconds();
- const milliseconds=now.getMilliseconds();
- const minutes=now.getMinutes();
- const hours=now.getHours()%12;
+    function checkPiP() {
+      if (typeof video.webkitSupportsPresentationMode === "function") {
+        try {
+          if (video.webkitSupportsPresentationMode("picture-in-picture")) {
+            pipButton.disabled = false;
+            pipButton.textContent = "ピクチャーインピクチャーを開始";
+            setStatus("タップしてPiPを開始");
+            return;
+          }
+        } catch (e) { }
+      }
+      if (typeof video.requestPictureInPicture === "function") {
+        pipButton.disabled = false;
+        pipButton.textContent = "ピクチャーインピクチャーを開始";
+        setStatus("タップしてPiPを開始");
+        return;
+      }
+      setStatus("PiP非対応環境です");
+    }
 
- let secondDeg,minuteDeg,hourDeg;
+    pipButton.addEventListener("click", async () => {
+      pipButton.disabled = true;
+      await playVideo();
+      if (typeof video.webkitSetPresentationMode === "function") {
+        try {
+          video.webkitSetPresentationMode(video.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture");
+          return;
+        } catch (e) { console.error(e) }
+      }
+      if (typeof video.requestPictureInPicture === "function") {
+        try {
+          if (document.pictureInPictureElement) await document.exitPictureInPicture();
+          else await video.requestPictureInPicture();
+        } catch (e) { console.error(e) }
+      }
+      pipButton.disabled = false;
+    });
 
- if(isSmooth){
-  secondDeg=seconds*6+milliseconds*.006;
-  minuteDeg=minutes*6+seconds*.1+milliseconds*.0001;
-  hourDeg=hours*30+minutes*.5+seconds*(.5/60);
- }else{
-  secondDeg=seconds*6;
-  minuteDeg=minutes*6+seconds*.1;
-  hourDeg=hours*30+minutes*.5;
- }
+    video.addEventListener("enterpictureinpicture", () => {
+      pipButton.disabled = false;
+      pipButton.textContent = "ピクチャーインピクチャーを終了";
+      setStatus("PiP再生中");
+    });
 
- ctx.fillStyle="#252525";
- ctx.fillRect(0,0,W,W);
+    video.addEventListener("leavepictureinpicture", () => {
+      pipButton.disabled = false;
+      pipButton.textContent = "ピクチャーインピクチャーを開始";
+      setStatus("タップしてPiPを開始");
+    });
 
- const cx=W/2;
- const cy=W/2;
- const radius=W/2;
+    video.addEventListener("webkitpresentationmodechanged", () => {
+      if (video.webkitPresentationMode === "picture-in-picture") {
+        pipButton.disabled = false;
+        pipButton.textContent = "ピクチャーインピクチャーを終了";
+        setStatus("PiP再生中");
+      } else {
+        pipButton.disabled = false;
+        pipButton.textContent = "ピクチャーインピクチャーを開始";
+        setStatus("タップしてPiPを開始");
+      }
+    });
 
- ctx.save();
- ctx.translate(cx,cy);
+    async function init() {
+      startClock();
+      if (!setupStream()) return;
+      await playVideo();
+      checkPiP();
+    }
 
- ctx.font=`400 ${32*SCALE}px 'Ubuntu',sans-serif`;
- ctx.fillStyle="#fff";
- ctx.textAlign="center";
- ctx.textBaseline="middle";
-
- for(let i=1;i<=12;i++){
-  const angle=(i*30-90)*Math.PI/180;
-  const dist=radius*.78;
-  ctx.fillText(i,Math.cos(angle)*dist,Math.sin(angle)*dist);
- }
-
- ctx.save();
- ctx.rotate(hourDeg*Math.PI/180);
- ctx.fillStyle="#eee";
- ctx.fillRect(-2*SCALE,-32*SCALE,4*SCALE,32*SCALE);
- ctx.beginPath();
- ctx.roundRect(-3*SCALE,-96*SCALE,6*SCALE,84*SCALE,9999);
- ctx.fill();
- ctx.restore();
-
- ctx.save();
- ctx.rotate(minuteDeg*Math.PI/180);
- ctx.fillStyle="#eee";
- ctx.fillRect(-2*SCALE,-32*SCALE,4*SCALE,32*SCALE);
- ctx.beginPath();
- ctx.roundRect(-3*SCALE,-144*SCALE,6*SCALE,132*SCALE,9999);
- ctx.fill();
- ctx.restore();
-
- ctx.save();
- ctx.rotate(secondDeg*Math.PI/180);
- ctx.fillStyle="#ffdd55";
- ctx.fillRect(-1*SCALE,-170*SCALE,2*SCALE,194*SCALE);
- ctx.restore();
-
- ctx.beginPath();
- ctx.arc(0,0,12*SCALE,0,Math.PI*2);
- ctx.fillStyle="#fff";
- ctx.fill();
-
- ctx.beginPath();
- ctx.arc(0,0,7*SCALE,0,Math.PI*2);
- ctx.fillStyle="#ffdd55";
- ctx.fill();
-
- ctx.restore();
-}
-
-function startClock(){
- if(animationFrame)cancelAnimationFrame(animationFrame);
-
- function loop(){
-  drawClock();
-  animationFrame=requestAnimationFrame(loop);
- }
-
- loop();
-}
-
-function setupStream(){
- if(typeof canvas.captureStream!=="function"){
-  setStatus("非対応ブラウザです");
-  return false;
- }
-
- try{
-  stream=canvas.captureStream(30);
-  video.srcObject=stream;
-  video.muted=true;
-  video.autoplay=true;
-  video.playsInline=true;
-  return true;
- }catch(e){
-  console.error("captureStream:",e);
-  setStatus("ストリームエラー");
-  return false;
- }
-}
-
-async function playVideo(){
- video.muted=true;
- video.autoplay=true;
- video.playsInline=true;
-
- try{
-  await video.play();
-  return true;
- }catch(e){
-  console.warn("video.play():",e);
-  return false;
- }
-}
-
-function checkPiP(){
- if(typeof video.webkitSupportsPresentationMode==="function"){
-  try{
-   if(video.webkitSupportsPresentationMode("picture-in-picture")){
-    pipButton.disabled=false;
-    pipButton.textContent="ピクチャーインピクチャーを開始";
-    setStatus("タップしてPiPを開始");
-    return;
-   }
-  }catch(e){}
- }
-
- if(typeof video.requestPictureInPicture==="function"){
-  pipButton.disabled=false;
-  pipButton.textContent="ピクチャーインピクチャーを開始";
-  setStatus("タップしてPiPを開始");
-  return;
- }
-
- setStatus("PiP非対応環境です");
-}
-
-pipButton.addEventListener("click",async()=>{
- pipButton.disabled=true;
- await playVideo();
-
- if(typeof video.webkitSetPresentationMode==="function"){
-  try{
-   video.webkitSetPresentationMode(
-    video.webkitPresentationMode==="picture-in-picture"
-    ?"inline"
-    :"picture-in-picture"
-   );
-   return;
-  }catch(e){
-   console.error("WebKit PiP:",e);
-  }
- }
-
- if(typeof video.requestPictureInPicture==="function"){
-  try{
-   if(document.pictureInPictureElement){
-    await document.exitPictureInPicture();
-   }else{
-    await video.requestPictureInPicture();
-   }
-  }catch(e){
-   console.error("Standard PiP:",e);
-  }
- }
-
- pipButton.disabled=false;
-});
-
-video.addEventListener("enterpictureinpicture",()=>{
- pipButton.disabled=false;
- pipButton.textContent="ピクチャーインピクチャーを終了";
- setStatus("PiP再生中");
-});
-
-video.addEventListener("leavepictureinpicture",()=>{
- pipButton.disabled=false;
- pipButton.textContent="ピクチャーインピクチャーを開始";
- setStatus("タップしてPiPを開始");
-});
-
-video.addEventListener("webkitpresentationmodechanged",()=>{
- if(video.webkitPresentationMode==="picture-in-picture"){
-  pipButton.disabled=false;
-  pipButton.textContent="ピクチャーインピクチャーを終了";
-  setStatus("PiP再生中");
- }else{
-  pipButton.disabled=false;
-  pipButton.textContent="ピクチャーインピクチャーを開始";
-  setStatus("タップしてPiPを開始");
- }
-});
-
-async function init(){
- startClock();
-
- if(!setupStream())return;
-
- await playVideo();
- checkPiP();
-}
-
-init();
-</script>
+    init();
+  </script>
 </body>
+
 </html>
