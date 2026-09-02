@@ -2,135 +2,1340 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Canvas Clock to PiP with Robust EventListeners</title>
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    >
+
+    <title>iOS Safari Canvas Clock PiP</title>
+
     <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
         body {
-            font-family: sans-serif;
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            min-height: 100%;
+        }
+
+        body {
+            min-height: 100svh;
+
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            margin: 0;
+
+            padding: 20px;
+
             background: #f0f0f0;
+
+            font-family:
+                -apple-system,
+                BlinkMacSystemFont,
+                "Helvetica Neue",
+                Arial,
+                sans-serif;
+
+            color: #222;
         }
-        canvas {
-            border: 2px solid #333;
+
+        h1 {
+            margin: 0 0 20px;
+
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        #clockCanvas {
+            display: block;
+
+            width: 300px;
+            height: 150px;
+
             background: #fff;
-            margin-bottom: 10px;
+
+            border: 2px solid #333;
+
+            margin-bottom: 20px;
         }
-        video {
-            display: none;
+
+        /*
+         * display:none は使用しない。
+         *
+         * iOS SafariではMediaStreamをsrcObjectにした
+         * videoの再生状態が不安定になることがあるため、
+         * video要素をDOM上に残しておく。
+         */
+        #videoElement {
+            position: fixed;
+
+            left: 4px;
+            bottom: 4px;
+
+            width: 2px;
+            height: 2px;
+
+            opacity: 0.01;
+
+            background: #000;
+
+            pointer-events: none;
+
+            z-index: 1;
         }
-        button {
-            padding: 10px 20px;
+
+        #pipButton {
+            appearance: none;
+            -webkit-appearance: none;
+
+            border: 0;
+            border-radius: 10px;
+
+            padding: 13px 22px;
+
+            background: #007aff;
+            color: #fff;
+
             font-size: 16px;
+            font-weight: 600;
+
             cursor: pointer;
-            margin: 5px;
+
+            touch-action: manipulation;
         }
+
+        #pipButton:disabled {
+            background: #999;
+            cursor: not-allowed;
+        }
+
+        #pipButton:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
         #status {
+            width: min(92vw, 600px);
+
+            margin-top: 15px;
+            padding: 10px 12px;
+
+            background: #fff;
+
+            border-radius: 8px;
+
+            color: #555;
+
+            font-size: 13px;
+
+            line-height: 1.5;
+
+            word-break: break-word;
+        }
+
+        #debug {
+            width: min(92vw, 600px);
+
             margin-top: 10px;
-            font-size: 14px;
+            padding: 10px 12px;
+
+            background: #111;
+
+            border-radius: 8px;
+
+            color: #00ff55;
+
+            font-family:
+                ui-monospace,
+                SFMono-Regular,
+                Menlo,
+                Monaco,
+                Consolas,
+                monospace;
+
+            font-size: 11px;
+
+            line-height: 1.5;
+
+            white-space: pre-wrap;
+
+            word-break: break-word;
+
+            max-height: 260px;
+
+            overflow-y: auto;
+        }
+
+        .note {
+            width: min(92vw, 600px);
+
+            margin-top: 12px;
+
             color: #666;
+
+            font-size: 12px;
+
+            line-height: 1.6;
+
+            text-align: center;
         }
     </style>
 </head>
+
 <body>
 
-    <canvas id="clockCanvas" width="300" height="150"></canvas>
-    <video id="videoElement" autoplay playsinline muted></video>
-    <button id="pipButton">ピクチャーインピクチャー開始</button>
-    <div id="status">ステータス: 停止中</div>
+    <h1>Canvas Clock → PiP</h1>
+
+    <canvas
+        id="clockCanvas"
+        width="600"
+        height="300"
+    ></canvas>
+
+    <video
+        id="videoElement"
+        autoplay
+        muted
+        playsinline
+        webkit-playsinline
+        preload="auto"
+    ></video>
+
+    <button id="pipButton">
+        ピクチャーインピクチャー開始
+    </button>
+
+    <div id="status">
+        ステータス: 初期化中...
+    </div>
+
+    <div id="debug"></div>
+
+    <div class="note">
+        iPhone / iPad のSafariでテストしてください。<br>
+        「ホーム画面に追加」したPWAではなく、通常のSafariで開いてください。
+    </div>
 
     <script>
-        const canvas = document.getElementById('clockCanvas');
-        const ctx = canvas.getContext('2d');
-        const video = document.getElementById('videoElement');
-        const pipButton = document.getElementById('pipButton');
-        const statusDiv = document.getElementById('status');
+        "use strict";
 
-        // 1. リアルタイム時計の描画
+        /*
+         * ============================================================
+         * DOM
+         * ============================================================
+         */
+
+        const canvas =
+            document.getElementById("clockCanvas");
+
+        const ctx =
+            canvas.getContext("2d");
+
+        const video =
+            document.getElementById("videoElement");
+
+        const pipButton =
+            document.getElementById("pipButton");
+
+        const statusDiv =
+            document.getElementById("status");
+
+        const debugDiv =
+            document.getElementById("debug");
+
+
+        /*
+         * ============================================================
+         * State
+         * ============================================================
+         */
+
+        let stream = null;
+
+        let clockTimer = null;
+
+        let pip = false;
+
+
+        /*
+         * ============================================================
+         * Debug
+         * ============================================================
+         */
+
+        function log(message) {
+
+            console.log("[CLOCK-PIP]", message);
+
+            const time =
+                new Date().toLocaleTimeString();
+
+            debugDiv.textContent +=
+                "[" +
+                time +
+                "] " +
+                message +
+                "\n";
+
+            debugDiv.scrollTop =
+                debugDiv.scrollHeight;
+        }
+
+
+        function status(message) {
+
+            statusDiv.textContent =
+                "ステータス: " + message;
+
+            log(message);
+        }
+
+
+        /*
+         * ============================================================
+         * Clock
+         * ============================================================
+         */
+
         function drawClock() {
-            const now = new Date();
-            const timeString = now.toTimeString().split(' ')[0] + '.' + Math.floor(now.getMilliseconds() / 100);
 
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            const now =
+                new Date();
 
-            ctx.fillStyle = '#333333';
-            ctx.font = '30px monospace';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(timeString, canvas.width / 2, canvas.height / 2);
+            const hours =
+                String(now.getHours())
+                    .padStart(2, "0");
+
+            const minutes =
+                String(now.getMinutes())
+                    .padStart(2, "0");
+
+            const seconds =
+                String(now.getSeconds())
+                    .padStart(2, "0");
+
+            const tenth =
+                Math.floor(
+                    now.getMilliseconds() / 100
+                );
+
+            const text =
+                hours +
+                ":" +
+                minutes +
+                ":" +
+                seconds +
+                "." +
+                tenth;
+
+
+            /*
+             * 背景
+             */
+
+            ctx.fillStyle =
+                "#ffffff";
+
+            ctx.fillRect(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+            );
+
+
+            /*
+             * 時計
+             */
+
+            ctx.fillStyle =
+                "#111111";
+
+            ctx.font =
+                "bold 70px monospace";
+
+            ctx.textAlign =
+                "center";
+
+            ctx.textBaseline =
+                "middle";
+
+            ctx.fillText(
+                text,
+                canvas.width / 2,
+                canvas.height / 2
+            );
         }
-        setInterval(drawClock, 100);
-        drawClock();
 
-        // 2. Canvas ストリームのバインド
-        if (canvas.captureStream) {
-            video.srcObject = canvas.captureStream(30);
-        } else {
-            alert('お使いのブラウザは canvas.captureStream に対応していません。');
-        }
 
-        // ==========================================
-        // 3. イベントリスナーの設定（ここを強化）
-        // ==========================================
+        function startClock() {
 
-        // 标准のPiP突入イベント
-        video.addEventListener('enterpictureinpicture', (event) => {
-            statusDiv.textContent = 'ステータス: PiP作動中 (Standard)';
-            pipButton.textContent = 'ピクチャーインピクチャー終了';
-            console.log('PiP Window:', event.pictureInPictureWindow);
-        });
+            drawClock();
 
-        // 標準のPiP終了イベント
-        video.addEventListener('leavepictureinpicture', () => {
-            statusDiv.textContent = 'ステータス: PiP終了 (Standard)';
-            pipButton.textContent = 'ピクチャーインピクチャー開始';
-        });
-
-        // iOS Safari (WebKit) 向けの独自プレゼンテーションモード変更イベント
-        video.addEventListener('webkitpresentationmodechanged', (event) => {
-            // event.mode は 'inline', 'fullscreen', 'picture-in-picture' などを取る
-            if (video.webkitPresentationMode === 'picture-in-picture') {
-                statusDiv.textContent = 'ステータス: PiP作動中 (iOS WebKit)';
-                pipButton.textContent = 'ピクチャーインピクチャー終了';
-            } else {
-                statusDiv.textContent = 'ステータス: PiP終了 (iOS WebKit)';
-                pipButton.textContent = 'ピクチャーインピクチャー開始';
+            if (clockTimer !== null) {
+                clearInterval(clockTimer);
             }
-        });
 
-        // 4. ボタンによるPiPトグル制御
-        pipButton.addEventListener('click', async () => {
+            clockTimer =
+                setInterval(
+                    drawClock,
+                    100
+                );
+
+            log("Clock started.");
+        }
+
+
+        /*
+         * ============================================================
+         * iOS判定
+         * ============================================================
+         */
+
+        function isIOS() {
+
+            return (
+                /iPhone|iPad|iPod/i.test(
+                    navigator.userAgent
+                )
+                ||
+                (
+                    navigator.platform ===
+                    "MacIntel"
+                    &&
+                    navigator.maxTouchPoints > 1
+                )
+            );
+        }
+
+
+        /*
+         * ============================================================
+         * Canvas captureStream
+         * ============================================================
+         */
+
+        function setupStream() {
+
+            if (
+                typeof canvas.captureStream !==
+                "function"
+            ) {
+
+                status(
+                    "canvas.captureStream() 非対応"
+                );
+
+                pipButton.disabled =
+                    true;
+
+                return false;
+            }
+
+
             try {
+
+                stream =
+                    canvas.captureStream(30);
+
+                log(
+                    "canvas.captureStream(30) OK"
+                );
+
+
+                const tracks =
+                    stream.getVideoTracks();
+
+                log(
+                    "Video tracks: " +
+                    tracks.length
+                );
+
+
+                if (tracks.length > 0) {
+
+                    log(
+                        "Track readyState: " +
+                        tracks[0].readyState
+                    );
+                }
+
+
+                video.srcObject =
+                    stream;
+
+                log(
+                    "video.srcObject = MediaStream"
+                );
+
+
+                return true;
+
+            } catch (error) {
+
+                console.error(error);
+
+                status(
+                    "captureStreamエラー: " +
+                    error.message
+                );
+
+                return false;
+            }
+        }
+
+
+        /*
+         * ============================================================
+         * Video情報
+         * ============================================================
+         */
+
+        function dumpVideoInfo() {
+
+            log(
+                "video.readyState = " +
+                video.readyState
+            );
+
+            log(
+                "video.paused = " +
+                video.paused
+            );
+
+            log(
+                "video.ended = " +
+                video.ended
+            );
+
+            log(
+                "video.videoWidth = " +
+                video.videoWidth
+            );
+
+            log(
+                "video.videoHeight = " +
+                video.videoHeight
+            );
+
+            log(
+                "video.currentTime = " +
+                video.currentTime
+            );
+        }
+
+
+        video.addEventListener(
+            "loadedmetadata",
+            function () {
+
+                log(
+                    "EVENT: loadedmetadata"
+                );
+
+                dumpVideoInfo();
+
+                checkPiP();
+            }
+        );
+
+
+        video.addEventListener(
+            "loadeddata",
+            function () {
+
+                log(
+                    "EVENT: loadeddata"
+                );
+
+                dumpVideoInfo();
+            }
+        );
+
+
+        video.addEventListener(
+            "canplay",
+            function () {
+
+                log(
+                    "EVENT: canplay"
+                );
+
+                dumpVideoInfo();
+            }
+        );
+
+
+        video.addEventListener(
+            "playing",
+            function () {
+
+                log(
+                    "EVENT: playing"
+                );
+
+                dumpVideoInfo();
+
+                status(
+                    "Video再生中"
+                );
+            }
+        );
+
+
+        video.addEventListener(
+            "pause",
+            function () {
+
+                log(
+                    "EVENT: pause"
+                );
+            }
+        );
+
+
+        video.addEventListener(
+            "waiting",
+            function () {
+
+                log(
+                    "EVENT: waiting"
+                );
+            }
+        );
+
+
+        video.addEventListener(
+            "stalled",
+            function () {
+
+                log(
+                    "EVENT: stalled"
+                );
+            }
+        );
+
+
+        video.addEventListener(
+            "error",
+            function () {
+
+                log(
+                    "EVENT: video error"
+                );
+
+                if (video.error) {
+
+                    log(
+                        "error.code = " +
+                        video.error.code
+                    );
+
+                    log(
+                        "error.message = " +
+                        video.error.message
+                    );
+                }
+            }
+        );
+
+
+        /*
+         * ============================================================
+         * Standard PiP
+         * ============================================================
+         */
+
+        video.addEventListener(
+            "enterpictureinpicture",
+            function (event) {
+
+                pip = true;
+
+                pipButton.textContent =
+                    "ピクチャーインピクチャー終了";
+
+                status(
+                    "PiP作動中（Standard API）"
+                );
+
+
+                if (
+                    event.pictureInPictureWindow
+                ) {
+
+                    log(
+                        "PiP size = " +
+                        event.pictureInPictureWindow.width +
+                        "x" +
+                        event.pictureInPictureWindow.height
+                    );
+                }
+            }
+        );
+
+
+        video.addEventListener(
+            "leavepictureinpicture",
+            function () {
+
+                pip = false;
+
+                pipButton.textContent =
+                    "ピクチャーインピクチャー開始";
+
+                status(
+                    "PiP終了（Standard API）"
+                );
+            }
+        );
+
+
+        /*
+         * ============================================================
+         * iOS WebKit PiP
+         * ============================================================
+         */
+
+        video.addEventListener(
+            "webkitpresentationmodechanged",
+            function () {
+
+                const mode =
+                    video.webkitPresentationMode;
+
+                log(
+                    "webkitPresentationMode = " +
+                    mode
+                );
+
+
+                if (
+                    mode ===
+                    "picture-in-picture"
+                ) {
+
+                    pip = true;
+
+                    pipButton.textContent =
+                        "ピクチャーインピクチャー終了";
+
+                    status(
+                        "PiP作動中（WebKit）"
+                    );
+
+                } else {
+
+                    pip = false;
+
+                    pipButton.textContent =
+                        "ピクチャーインピクチャー開始";
+
+                    status(
+                        "PiP終了（WebKit）"
+                    );
+                }
+            }
+        );
+
+
+        /*
+         * ============================================================
+         * PiP対応チェック
+         * ============================================================
+         */
+
+        function checkPiP() {
+
+            log(
+                "========== PiP CHECK =========="
+            );
+
+
+            /*
+             * iOS WebKit
+             */
+
+            const hasWebKitSupport =
+                typeof video.webkitSupportsPresentationMode ===
+                "function";
+
+            const hasWebKitSet =
+                typeof video.webkitSetPresentationMode ===
+                "function";
+
+
+            log(
+                "iOS = " +
+                isIOS()
+            );
+
+            log(
+                "webkitSupportsPresentationMode = " +
+                hasWebKitSupport
+            );
+
+            log(
+                "webkitSetPresentationMode = " +
+                hasWebKitSet
+            );
+
+
+            if (
+                hasWebKitSupport
+            ) {
+
+                try {
+
+                    const supported =
+                        video.webkitSupportsPresentationMode(
+                            "picture-in-picture"
+                        );
+
+                    log(
+                        "WebKit PiP supported = " +
+                        supported
+                    );
+
+
+                    if (supported) {
+
+                        pipButton.disabled =
+                            false;
+
+                        status(
+                            "WebKit PiP対応"
+                        );
+
+                        return true;
+                    }
+
+                } catch (error) {
+
+                    log(
+                        "WebKit check error: " +
+                        error.message
+                    );
+                }
+            }
+
+
+            /*
+             * Standard API
+             */
+
+            const standard =
+                typeof video.requestPictureInPicture ===
+                "function";
+
+            log(
+                "requestPictureInPicture = " +
+                standard
+            );
+
+
+            log(
+                "document.pictureInPictureEnabled = " +
+                (
+                    "pictureInPictureEnabled" in document
+                        ? document.pictureInPictureEnabled
+                        : "undefined"
+                )
+            );
+
+
+            if (standard) {
+
+                pipButton.disabled =
+                    false;
+
+                status(
+                    "Standard PiP対応"
+                );
+
+                return true;
+            }
+
+
+            /*
+             * 未対応
+             */
+
+            pipButton.disabled =
+                true;
+
+            status(
+                "PiP API非対応"
+            );
+
+            return false;
+        }
+
+
+        /*
+         * ============================================================
+         * Video再生
+         * ============================================================
+         */
+
+        async function playVideo() {
+
+            try {
+
+                video.muted =
+                    true;
+
+                video.playsInline =
+                    true;
+
+
+                log(
+                    "video.play()..."
+                );
+
+
                 await video.play();
 
-                // iOS / Safari 向け独自APIのフォールバック判定
-                if (typeof video.webkitSetPresentationMode === 'function') {
-                    if (video.webkitPresentationMode === 'picture-in-picture') {
-                        video.webkitSetPresentationMode('inline');
-                    } else {
-                        video.webkitSetPresentationMode('picture-in-picture');
-                    }
+
+                log(
+                    "video.play() SUCCESS"
+                );
+
+
+                dumpVideoInfo();
+
+
+                return true;
+
+            } catch (error) {
+
+                console.error(error);
+
+                log(
+                    "video.play() FAILED"
+                );
+
+                log(
+                    error.name +
+                    ": " +
+                    error.message
+                );
+
+
+                status(
+                    "Video再生開始失敗: " +
+                    error.message
+                );
+
+
+                return false;
+            }
+        }
+
+
+        /*
+         * ============================================================
+         * WebKit PiP
+         * ============================================================
+         */
+
+        function webkitPiP() {
+
+            try {
+
+                if (
+                    typeof video.webkitSupportsPresentationMode !==
+                    "function"
+                ) {
+
+                    return false;
+                }
+
+
+                const supported =
+                    video.webkitSupportsPresentationMode(
+                        "picture-in-picture"
+                    );
+
+
+                log(
+                    "webkitSupportsPresentationMode = " +
+                    supported
+                );
+
+
+                if (!supported) {
+
+                    status(
+                        "WebKit PiPは現在利用できません"
+                    );
+
+                    return false;
+                }
+
+
+                if (
+                    video.webkitPresentationMode ===
+                    "picture-in-picture"
+                ) {
+
+                    log(
+                        "WebKit PiP → inline"
+                    );
+
+                    video.webkitSetPresentationMode(
+                        "inline"
+                    );
+
+                } else {
+
+                    log(
+                        "WebKit inline → PiP"
+                    );
+
+                    video.webkitSetPresentationMode(
+                        "picture-in-picture"
+                    );
+                }
+
+
+                return true;
+
+            } catch (error) {
+
+                console.error(error);
+
+                log(
+                    "WebKit PiP ERROR: " +
+                    error.name +
+                    ": " +
+                    error.message
+                );
+
+                status(
+                    "WebKit PiPエラー: " +
+                    error.message
+                );
+
+                return false;
+            }
+        }
+
+
+        /*
+         * ============================================================
+         * Standard PiP
+         * ============================================================
+         */
+
+        async function standardPiP() {
+
+            try {
+
+                if (
+                    document.pictureInPictureElement
+                ) {
+
+                    log(
+                        "Standard PiP → exit"
+                    );
+
+                    await document.exitPictureInPicture();
+
+                } else {
+
+                    log(
+                        "Standard → requestPictureInPicture"
+                    );
+
+                    await video.requestPictureInPicture();
+                }
+
+
+                return true;
+
+            } catch (error) {
+
+                console.error(error);
+
+                log(
+                    "Standard PiP ERROR: " +
+                    error.name +
+                    ": " +
+                    error.message
+                );
+
+                status(
+                    "Standard PiPエラー: " +
+                    error.message
+                );
+
+                return false;
+            }
+        }
+
+
+        /*
+         * ============================================================
+         * PiP Button
+         * ============================================================
+         */
+
+        pipButton.addEventListener(
+            "click",
+            async function () {
+
+                log(
+                    "================================"
+                );
+
+                log(
+                    "PiP BUTTON CLICK"
+                );
+
+
+                /*
+                 * 重要:
+                 *
+                 * iOSではPiP開始をユーザー操作から
+                 * 直接呼ぶ必要がある場合がある。
+                 */
+
+
+                const playing =
+                    await playVideo();
+
+                if (!playing) {
+
                     return;
                 }
 
-                // 標準 PiP API の制御
-                if (document.pictureInPictureElement) {
-                    await document.exitPictureInPicture();
-                } else if (video.requestPictureInPicture) {
-                    await video.requestPictureInPicture();
-                } else {
-                    alert('この環境はピクチャーインピクチャーに対応していません。');
+
+                /*
+                 * 少しだけ状態を確認
+                 */
+
+                dumpVideoInfo();
+
+
+                /*
+                 * WebKit
+                 */
+
+                if (
+                    typeof video.webkitSetPresentationMode ===
+                    "function"
+                ) {
+
+                    let supported =
+                        false;
+
+
+                    try {
+
+                        supported =
+                            video.webkitSupportsPresentationMode(
+                                "picture-in-picture"
+                            );
+
+                    } catch (error) {
+
+                        log(
+                            "WebKit support check error: " +
+                            error.message
+                        );
+                    }
+
+
+                    if (supported) {
+
+                        webkitPiP();
+
+                        return;
+                    }
                 }
-            } catch (error) {
-                console.error('PiPエラー:', error);
-                statusDiv.textContent = 'ステータス: エラー発生 (' + error.message + ')';
+
+
+                /*
+                 * Standard
+                 */
+
+                if (
+                    typeof video.requestPictureInPicture ===
+                    "function"
+                ) {
+
+                    await standardPiP();
+
+                    return;
+                }
+
+
+                /*
+                 * 非対応
+                 */
+
+                status(
+                    "この環境ではPiPを利用できません"
+                );
+
+                alert(
+                    "この環境ではPicture-in-Pictureを利用できません。"
+                );
             }
-        });
+        );
+
+
+        /*
+         * ============================================================
+         * Visibility
+         * ============================================================
+         */
+
+        document.addEventListener(
+            "visibilitychange",
+            function () {
+
+                log(
+                    "visibility = " +
+                    document.visibilityState
+                );
+            }
+        );
+
+
+        /*
+         * ============================================================
+         * Init
+         * ============================================================
+         */
+
+        async function init() {
+
+            log(
+                "================================"
+            );
+
+            log(
+                "Canvas Clock PiP"
+            );
+
+            log(
+                "================================"
+            );
+
+
+            log(
+                "User Agent:"
+            );
+
+            log(
+                navigator.userAgent
+            );
+
+
+            log(
+                "iOS detected = " +
+                isIOS()
+            );
+
+
+            /*
+             * Canvas
+             */
+
+            startClock();
+
+
+            /*
+             * Canvas → MediaStream
+             */
+
+            const ok =
+                setupStream();
+
+            if (!ok) {
+
+                return;
+            }
+
+
+            /*
+             * Video属性
+             */
+
+            video.muted =
+                true;
+
+            video.playsInline =
+                true;
+
+            video.setAttribute(
+                "muted",
+                ""
+            );
+
+            video.setAttribute(
+                "playsinline",
+                ""
+            );
+
+            video.setAttribute(
+                "webkit-playsinline",
+                ""
+            );
+
+
+            /*
+             * 自動再生を試す
+             */
+
+            try {
+
+                await video.play();
+
+                log(
+                    "Initial video.play() SUCCESS"
+                );
+
+                dumpVideoInfo();
+
+            } catch (error) {
+
+                log(
+                    "Initial autoplay blocked: " +
+                    error.name +
+                    ": " +
+                    error.message
+                );
+
+                status(
+                    "「PiP開始」をタップしてください"
+                );
+            }
+
+
+            /*
+             * PiP確認
+             */
+
+            checkPiP();
+        }
+
+
+        /*
+         * ============================================================
+         * Start
+         * ============================================================
+         */
+
+        init();
+
     </script>
 
 </body>
