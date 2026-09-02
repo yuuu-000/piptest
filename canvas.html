@@ -44,8 +44,13 @@
       background-color: var(--background);
     }
 
+    /* iOSで確実にPiPを機能させるため、display:noneではなく透明化してDOMに常駐させる */
     video {
-      display: none;
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      width: 1px;
+      height: 1px;
     }
 
     .button-group {
@@ -84,9 +89,9 @@
 
 <body>
   <div id="clock-card">
+    <!-- 2倍解像度（380x380）で高精細化、CSSで190x190に表示 -->
     <canvas id="clockCanvas" width="380" height="380"></canvas>
-    <!-- iOS SafariでWebKitのPiPを確実に発動させるため controls と playsinline を付与 -->
-    <video id="videoElement" autoplay playsinline muted controls style="display:none;"></video>
+    <video id="videoElement" autoplay playsinline muted></video>
     <div class="button-group">
       <button id="pipButton" disabled>PiP非対応環境です</button>
       <button id="toggleSmooth">Smooth: OFF</button>
@@ -241,20 +246,15 @@
     pipButton.addEventListener("click", async () => {
       await playVideo();
 
-      // iOS Safari (WebKit) の場合はまずDOM上に一時的に表示させるなどのアプローチが必要な場合があるため、
-      // webkitSetPresentationMode を安全に呼び出すように修正
       if (typeof video.webkitSetPresentationMode === "function") {
         try {
-          const currentMode = video.webkitPresentationMode;
-          if (currentMode === "picture-in-picture") {
+          if (video.webkitPresentationMode === "picture-in-picture") {
             video.webkitSetPresentationMode("inline");
           } else {
             video.webkitSetPresentationMode("picture-in-picture");
           }
           return;
-        } catch (e) {
-          console.error(e);
-        }
+        } catch (e) {}
       }
 
       if (typeof video.requestPictureInPicture === "function") {
